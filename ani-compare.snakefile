@@ -75,7 +75,9 @@ rule copy_and_unzip_genomes:
 
 # we copy all the fasta files to the genome_dir for pyani, so we can just use those paths here
 rule build_genome_filepaths:
-    output: os.path.join(out_dir, "genomes", "genome-filepaths.txt")
+    output:
+        filepaths=os.path.join(out_dir, "genomes", "genome-filepaths.txt"),
+        fromfile_csv=os.path.join(out_dir, "genomes", "fromfile.csv")
     params:
         genome_dir=os.path.join(out_dir, "genomes")
     resources:
@@ -83,17 +85,19 @@ rule build_genome_filepaths:
         time=1200,
         partition="med2",
     run:
-        with open(str(output), "w") as out:
+        with open(str(output.filepaths), "w") as out and open(str(output.fromfile_csv), 'w') as ff_out:
             acc_list = IDENTS
+            ff_out.write('name,genome_filename,protein_filename\n')
             for acc in acc_list:
-                fn = os.path.join(params.genome_dir, f"{acc}_genome.fna")
+                fn = os.path.join(params.genome_dir, f"{acc}_genomic.fna")
                 out.write(f"{fn}\n")
+                ff_out.write(f"{acc},{fn},\n")
 
 # sourmash
 # rebuild sigs so we can use k21, k31, k51, scaled = 1 so we can do scaled= 1,10,1000 comparisons
 
 rule sourmash_sketch:
-    input: os.path.join(out_dir, "genomes", "genome-filepaths.txt")
+    input: os.path.join(out_dir, "genomes", "fromfile.csv")
     output: os.path.join(out_dir, "sourmash", "signatures.zip")
     conda: "conf/env/sourmash.yml"
     log: os.path.join(logs_dir, "sourmash", "sketch.log")
