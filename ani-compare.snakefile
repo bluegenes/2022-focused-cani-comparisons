@@ -60,7 +60,7 @@ rule copy_and_unzip_genomes:
                     dest = os.path.join(params.genome_dir, f"{acc}_genomic.fna.gz")
                     dest_unz = os.path.join(params.genome_dir, f"{acc}_genomic.fna")
                     md5_file = os.path.join(params.genome_dir, f"{acc}_genomic.md5")
-                    shell("cp {fn} {dest}")
+                    shell("cp {fn} {dest}") # do we need both gzipped and unzipped versions??
                     shell("gunzip -c {fn} > {dest_unz}")
                     # get md5 of unzipped fna
                     with open(dest_unz, "rb") as f:
@@ -85,7 +85,7 @@ rule build_genome_filepaths:
         time=1200,
         partition="med2",
     run:
-        with open(str(output.filepaths), "w") as out and open(str(output.fromfile_csv), 'w') as ff_out:
+        with open(str(output.filepaths), "w") as out, open(str(output.fromfile_csv), 'w') as ff_out:
             acc_list = IDENTS
             ff_out.write('name,genome_filename,protein_filename\n')
             for acc in acc_list:
@@ -104,7 +104,7 @@ rule sourmash_sketch:
     benchmark: os.path.join(logs_dir, "sourmash", "sketch.benchmark")
     shell:
         """
-        sourmash sketch fromfile {input} -p k=21,k=31,k=51,scaled=1 -o {output} > {log}
+        sourmash sketch fromfile {input} -p dna,k=21,k=31,k=51,scaled=1 -o {output} > {log}
         """
 
 # use api so we can get all values
@@ -138,9 +138,9 @@ rule pyani_index_and_createdb:
         classes_basename = "classes.txt",
         labels_basename = "labels.txt"
     resources:
-        mem_mb=lambda wildcards, attempt: attempt *3000,
+        mem_mb=lambda wildcards, attempt: attempt *20000,
         time=1200,
-        partition="med2",
+        partition="bmm",
     log: os.path.join(logs_dir, "pyani", "index-and-createdb.log")
     benchmark: os.path.join(logs_dir, "pyani", "index-and-createdb.benchmark")
     conda: "conf/env/pyani0.3.yml"
@@ -211,7 +211,7 @@ rule compare_via_fastANI:
     output: os.path.join(out_dir, "fastani","fastani.tsv"),
     threads: 11
     resources:
-        mem_mb=lambda wildcards, attempt: attempt *9000,
+        mem_mb=lambda wildcards, attempt: attempt *20000,
         time=12000,
         partition="bmm",
     log: os.path.join(logs_dir, "fastani", "fastani.log")
