@@ -7,6 +7,7 @@ logs_dir = os.path.join(out_dir, "logs")
 
 comparison_file = "gtdb-comparisons.largest-size-diff.n10.csv"
 comparisons = pd.read_csv(comparison_file)
+basename= "comparisons"
 identA= comparisons['identA'].tolist()
 identB= comparisons['identB'].tolist()
 IDENTS = list(set(identA+identB))
@@ -25,6 +26,7 @@ rule all:
         os.path.join(out_dir, "pyani", "ANIb_results/pyani.csv"),
         os.path.join(out_dir, "fastani","fastani.tsv"),
         os.path.join(out_dir, "sourmash", "signatures.zip"),
+        expand(os.path.join(out_dir, "sourmash", f"{basename}.k{{ksize}}-sc{{scaled}}.cANI.csv"), ksize=[21], scaled=[1,1000]),
 
 def get_all_genomes(w):
     comparison_accs = IDENTS
@@ -112,12 +114,13 @@ rule sourmash_api_compare:
     input: 
         sigs=os.path.join(out_dir, "sourmash", "signatures.zip"),
         comparisons=comparison_file,#COMPARISON_FILES
+    output: os.path.join(out_dir, "sourmash", "{basename}.k{ksize}-sc{scaled}.cANI.csv")
     conda: "conf/env/sourmash.yml"
-    log: os.path.join(logs_dir, "sourmash", "api-compare.log")
-    benchmark: os.path.join(logs_dir, "sourmash", "api-compare.benchmark")
+    log: os.path.join(logs_dir, "sourmash", "{basename}.k{ksize}-sc{scaled}.api-compare.log")
+    benchmark: os.path.join(logs_dir, "sourmash", "{basename}.k{ksize}-sc{scaled}.api-compare.benchmark")
     shell:
         """
-        python sourmash-api-compare.py {input.sigs} --comparisons {input.comparisons} -o {output} 2> {log}
+        python sourmash-api-compare.py {input.sigs} -c {input.comparisons} -o {output} 2> {log}
         """
 
 # just use python api -- not very many comparisons
