@@ -2,15 +2,19 @@ import os
 import pandas as pd
 # compare different ANI methods on a series of genomes
 
-out_dir = "output.ani-compare"
+out_dir = "output.ani-compare-test"
 logs_dir = os.path.join(out_dir, "logs")
 
-comparison_file = "gtdb-comparisons.largest-size-diff.n10.csv"
+#comparison_file = "gtdb-comparisons.largest-size-diff.n10.csv"
+comparison_file = "family.test-comparisons.csv"
 comparisons = pd.read_csv(comparison_file)
 basename= "comparisons"
 identA= comparisons['identA'].tolist()
 identB= comparisons['identB'].tolist()
 IDENTS = list(set(identA+identB))
+KSIZE = [21]
+SCALED = [1,1000]
+
 
 original_genomedir = "/home/ntpierce/2021-rank-compare/genbank/genomes"
 
@@ -23,10 +27,9 @@ rule all:
     input: 
         os.path.join(out_dir, "genomes", "genome-filepaths.txt"),
         expand(os.path.join(out_dir, "genomes", "{acc}_genomic.fna"), acc=IDENTS),
-        os.path.join(out_dir, "pyani", "ANIb_results/pyani.csv"),
-        os.path.join(out_dir, "fastani","fastani.tsv"),
         os.path.join(out_dir, "sourmash", "signatures.zip"),
         expand(os.path.join(out_dir, "sourmash", f"{basename}.k{{ksize}}-sc{{scaled}}.cANI.csv"), ksize=[21], scaled=[1,1000]),
+        os.path.join(out_dir, "combinedANI.csv"),
 
 def get_all_genomes(w):
     comparison_accs = IDENTS
@@ -109,7 +112,7 @@ rule sourmash_sketch:
         sourmash sketch fromfile {input} -p dna,k=21,k=31,k=51,scaled=1 -o {output} > {log}
         """
 
-# use api so we can get all values
+# just use python api -- not very many comparisons
 rule sourmash_api_compare:
     input: 
         sigs=os.path.join(out_dir, "sourmash", "signatures.zip"),
@@ -122,10 +125,6 @@ rule sourmash_api_compare:
         """
         python sourmash-api-compare.py {input.sigs} -c {input.comparisons} -o {output} 2> {log}
         """
-
-# just use python api -- not very many comparisons
-#rule sourmash_compare_using_api:
-#    input:
 
 rule pyani_index_and_createdb:
     input:
@@ -172,7 +171,6 @@ rule pyANI_ANIb:
         time=1200,
         partition="med2"
     params:
-        #pyanidb = lambda w: os.path.join(out_dir, 'pyani/paths', w.path, f".pyani-{w.path}/pyanidb"),
         genome_dir = lambda w: os.path.join(out_dir, 'genomes'),
         output_dir = lambda w: os.path.join(out_dir, 'pyani', "ANIb_results"),
     log: os.path.join(logs_dir, "pyani_anib", "pyANI-anib.log")
@@ -189,13 +187,14 @@ rule pyANI_ANIb:
 #localrules: aggregate_ranktax_anib
 rule aggregate_ranktax_anib:
     input:
+        comparisons=comparison_file,
         covF= os.path.join(out_dir, "pyani/ANIb_results", "ANIb_alignment_coverage.tab"),
         lenF= os.path.join(out_dir, "pyani/ANIb_results","ANIb_alignment_lengths.tab"),
         hadF= os.path.join(out_dir, "pyani/ANIb_results","ANIb_hadamard.tab"),
         idF=  os.path.join(out_dir, "pyani/ANIb_results","ANIb_percentage_identity.tab"),
         seF=  os.path.join(out_dir, "pyani/ANIb_results","ANIb_similarity_errors.tab"),
     output:
-        os.path.join(out_dir, "pyani", "ANIb_results/pyani.csv"),
+        os.path.join(out_dir, "pyani", "pyani.ANIb.csv"),
     params:
         results_dir =  os.path.join(out_dir, "pyani/ANIb_results"),
         #compare_rank = compare_rank,
@@ -205,7 +204,7 @@ rule aggregate_ranktax_anib:
         partition="med2"
     shell:
         """
-        python aggregate-pyani-results.py {params.results_dir} 
+        python aggregate-pyani-results.py {params.results_dir} --pyani-version 0.2 -c {input.comparisons} -o {output}
         """
 #--rank {params.compare_rank} --ranktax-name {wildcards.ranktax} --output-csv {output} --pyani-version v0.2
 
@@ -226,22 +225,40 @@ rule compare_via_fastANI:
         """
 
 
-#localrules: parse_fastani_ranktax
-#rule parse_fastani_ranktax:
-#    input: os.path.join(out_dir, "fastani", "fastani.tsv")
-#    output: os.path.join(out_dir, "fastani", "fastani.parsed.csv")
-#    #params:
-#        #compare_rank= compare_rank,
-#    resources:
-#        mem_mb=lambda wildcards, attempt: attempt *3000,
-#        time=12000,
-#        partition="med2",
-#    log: os.path.join(logs_dir, "fastani", "parse_fastani.log")
-#    benchmark: os.path.join(logs_dir, "fastani", "parse_fastani.benchmark")
-#    shell:
-#        """
-#        python aggregate-fastani.py --fastani-ranktax {input} --rank {params.compare_rank} \
-#                                    --ranktax-name {wildcards.ranktax} \
-#                                    --output-csv {output} 2> {log}
-#        """
+localrules: parse_fastani
+rule parse_fastani:
+    input: 
+        fastani=os.path.join(out_dir, "fastani", "fastani.tsv"),
+        comparisons=comparison_file,
+    output: os.path.join(out_dir, "fastani", "fastani.ANI.csv")
+    resources:
+        mem_mb=lambda wildcards, attempt: attempt *3000,
+        time=12000,
+        partition="med2",
+    log: os.path.join(logs_dir, "fastani", "parse_fastani.log")
+    benchmark: os.path.join(logs_dir, "fastani", "parse_fastani.benchmark")
+    shell:
+        """
+        python parse-fastani-results.py --fastani {input.fastani} -c {input.comparisons} \
+                                        --output-csv {output} 2> {log}
+        """
+
+localrules: combine_ani
+rule combine_ani:
+    input: 
+        fastani= os.path.join(out_dir, "fastani", "fastani.ANI.csv"),
+        pyani=os.path.join(out_dir, "pyani", "pyani.ANIb.csv"),
+        sourmash=expand(os.path.join(out_dir, "sourmash", f"{basename}.k{{ksize}}-sc{{scaled}}.cANI.csv"), ksize=KSIZE, scaled=SCALED),
+    output: os.path.join(out_dir, "combinedANI.csv")
+    resources:
+        mem_mb=lambda wildcards, attempt: attempt *3000,
+        time=12000,
+        partition=",ed2",
+    log: os.path.join(logs_dir, "combine-ani", "combine-ani.log")
+    benchmark: os.path.join(logs_dir, "combine-ani", "combine-ani.benchmark")
+    shell:
+        """
+        python combine-ani.py --fastani {input.fastani} --pyani {input.pyani} \
+                              --sourmash {input.sourmash} --output-csv {output} 2> {log}
+        """
 

@@ -36,7 +36,7 @@ def main(args):
     results = []
     for n, (idA, idB) in enumerate(comparisons):
         if n !=0 and n % 50 == 0:
-            notify(f"... assessing {n}th taxon comparison, lowest common rank: {lowest_common_rank}, anchor: {anchor_acc} {anchor_sciname}\n")
+            notify(f"... assessing {n}th comparison\n")
 
         comparison_name = f"{idA}_x_{idB}"
         picklist = SignaturePicklist('ident')
