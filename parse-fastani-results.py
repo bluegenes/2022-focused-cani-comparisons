@@ -26,6 +26,7 @@ def main(args):
     fastani["idA"] = fastani["a_fn"].str.rsplit(pat="/", n=1, expand=True)[1].str.rsplit(pat="_genomic.fna", n=1, expand=True)[0]
     fastani["idB"] = fastani["b_fn"].str.rsplit(pat="/", n=1, expand=True)[1].str.rsplit(pat="_genomic.fna", n=1, expand=True)[0]
     fastani["comparison_name"] = fastani["idA"] + "_x_" + fastani["idB"]
+    fastani.drop_duplicates(inplace=True)
     fastani.set_index("comparison_name",inplace=True)
     fastani_comparisons = fastani.index.to_list()
 
@@ -55,10 +56,10 @@ def main(args):
 
             # get directional alignment fractions
             # alignment fraction = count_bidirectional_frag_mappings/total_query_frags
-            comp_af = float(fwd_fmap)/float(fwd_qfrag)
+            fwd_af = float(fwd_fmap)/float(fwd_qfrag)
             rev_af = float(rev_fmap)/float(rev_qfrag)
             avg_af = np.mean([fwd_af, rev_af])
-            this_info = fastani_res(comparison_name, idA, idB, avg_ani, avg_af)
+            this_info = fastani_res(fwd_name, idA, idB, avg_ani, avg_af)
             results.append(this_info)
         else:
             if fwd_name in fastani_comparisons:

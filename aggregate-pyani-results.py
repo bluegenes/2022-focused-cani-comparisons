@@ -93,7 +93,7 @@ def main(args):
         pyani_hadamardB = hadD.at[b_label, a_label]
         pyani_hadamard = np.mean([pyani_hadamardA, pyani_hadamardB])
 
-        this_info = pyani_lcares(comparison_name, a, b, pyani_ident, pyani_coverage, pyani_aln_length, pyani_sim_errors, pyani_hadamard)
+        this_info = pyani_res(fwd_name, idA, idB, pyani_ident, pyani_coverage, pyani_aln_length, pyani_sim_errors, pyani_hadamard)
         results.append(this_info)
 
     notify(f"No pyANI results available for {num_empty} desired comparisons.")

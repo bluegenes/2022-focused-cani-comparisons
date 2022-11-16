@@ -2,29 +2,44 @@ import os
 import sys
 import argparse
 import pandas as pd
-from functools import partial
+from functools import partial, reduce
 
 from sourmash.tax import tax_utils
 from sourmash.lca import lca_utils
 from sourmash.logging import notify
 
 
-def find_lca(row):
-    idA = row['identA']
-    linA = tax_assign[idA]
-    idB = row['identB']
-    linB = tax_assign[idB]
-    lintree = build_tree(linA, linB)
+
+def get_lineage(name, tax_assign):
+    # handle GCA/GCF issues
+    ident = tax_utils.get_ident(name) #, keep_identifier_versions=True)
+    try:
+        lineage = tax_assign[ident]
+    except KeyError:
+        if "GCF" in ident:
+            ident = ident.replace("GCF", "GCA")
+        elif "GCA" in ident:
+            ident = ident.replace("GCA", "GCF")
+        lineage = tax_assign.get(ident, None)
+    return lineage
+
+def find_lca(row, tax_assign):
+    linA = get_lineage(row['identA'], tax_assign)
+    linB = get_lineage(row['identB'], tax_assign)
+    lintree = lca_utils.build_tree([linA, linB])
     lca, node_len = lca_utils.find_lca(lintree)
-    row['lca_lineage'] = lca_utils.display_lineage(lca)
-    row['lca_rank'] = lca_utils.display_lineage(lca[-1].rank)
+    if lca is not None:
+        row['lca_lineage'] = lca_utils.display_lineage(lca)
+        row['lca_rank'] = lca[-1].rank
     return row
 
 def main(args):
 
     pyani_res = pd.read_csv(args.pyani_csv)
     fastani_res = pd.read_csv(args.fastani_csv)
-    sourmash_res = pd.read_csv(args.sourmash)
+    #sourmash_csvs = pd.read_csv(args.sourmash_csv)
+
+    sourmash_res = pd.concat((pd.read_csv(f) for f in args.sourmash_csv), ignore_index=True)
 
     ani_dfs = [pyani_res, fastani_res, sourmash_res]
 
@@ -37,7 +52,7 @@ def main(args):
         tax_assign = tax_utils.MultiLineageDB.load([args.taxonomy],
                                                    keep_full_identifiers=False,
                                                    keep_identifier_versions=False)
-        aniDF = aniDF.apply(find_lca, axis=1)
+        aniDF = aniDF.apply(find_lca, axis=1, tax_assign=tax_assign)
 
     # print to csv
     aniDF.to_csv(args.output_csv, index=False)
@@ -48,9 +63,9 @@ def cmdline(sys_args):
     p = argparse.ArgumentParser()
     p.add_argument("-p", "--pyani-csv")
     p.add_argument("-f", "--fastani-csv")
-    p.add_argument("-s", "--sourmash-csv")
+    p.add_argument("-s", "--sourmash-csv", nargs='+')
     p.add_argument("-o", "--output-csv", required=True)
-    p.add_argument("-t", "--taxonomy", default="gtdb-rs207.taxonomy.csv")
+    p.add_argument("-t", "--taxonomy", default="/group/ctbrowngrp/sourmash-db/gtdb-rs207/gtdb-rs207.taxonomy.csv")
     args = p.parse_args()
     return main(args)
 

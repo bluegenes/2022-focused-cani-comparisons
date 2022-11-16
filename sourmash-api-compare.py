@@ -15,16 +15,20 @@ from sourmash.sketchcomparison import FracMinHashComparison
 from sourmash.picklist import SignaturePicklist
 from sourmash.logging import notify
 
-CompareResult = namedtuple('CompareResult', ['comparison_name', 'identA', 'identB',
-                                             'ksize', 'scaled', 'avg_cANI', 'jaccard',
-                                             'idA_in_idB', 'idA_in_idB_cANI', 'idB_in_idA',
-                                             'idB_in_idA_cANI','idA_hashes', 'idB_hashes',
-                                             'num_common'])
 
 
 def main(args):
     ksize=args.ksize
     scaled=args.scaled
+
+    CompareResult = namedtuple('CompareResult', ['comparison_name', 'identA', 'identB',
+                                                 'ksize', 'scaled', 'avg_cANI', 'jaccard',
+                                                 'idA_in_idB', 'idA_in_idB_cANI', 'idB_in_idA',
+                                                 'idB_in_idA_cANI','idA_hashes', 'idB_hashes',
+                                                 'num_common'])
+
+    ANIResult = namedtuple('ANIResult', ['comparison_name', 'identA', 'identB',
+                                                 f'avg_cANI_k{ksize}_sc{scaled}'])
 
     db = sourmash.load_file_as_index(args.db)
 
@@ -33,7 +37,7 @@ def main(args):
     comparisons = list(zip(compareInfo.identA, compareInfo.identB))
 
     # loop through comparisons
-    results = []
+    results,ani_results = [], []
     for n, (idA, idB) in enumerate(comparisons):
         if n !=0 and n % 50 == 0:
             notify(f"... assessing {n}th comparison\n")
@@ -62,13 +66,18 @@ def main(args):
                              cANI_1, contain2, cANI_2, idA_sc_hashes, idB_sc_hashes, \
                              cmp.total_unique_intersect_hashes)
         results.append(res)
+        ani_res = ANIResult(comparison_name, idA, idB, cmp.avg_containment_ani)
+        ani_results.append(ani_res)
 
     # convert comparison info to pandas dataframe
     comparisonDF = pd.DataFrame.from_records(results, columns = CompareResult._fields)
+    aniDF= pd.DataFrame.from_records(ani_results, columns = ANIResult._fields)
+
 
     # print to csv
     comparisonDF.to_csv(args.output_csv, index=False)
-    print(f"done! comparison info written to {args.output_csv}")
+    aniDF.to_csv(args.ani_csv, index=False)
+    print(f"done! Detailed comparison info written to {args.output_csv}. Abbreviated ANI info written to {args.ani_csv}")
 
 def cmdline(sys_args):
     "Command line entry point w/argparse action."
@@ -77,6 +86,7 @@ def cmdline(sys_args):
     p.add_argument('-c', "--comparison-csv")
     p.add_argument('-k', "--ksize", default=21, type=int)
     p.add_argument('-s', "--scaled", default=1000, type=int)
+    p.add_argument("-a", "--ani-csv", required=True)
     p.add_argument("-o", "--output-csv", required=True)
     args = p.parse_args()
     return main(args)

@@ -6,12 +6,13 @@ out_dir = "output.ani-compare-test"
 logs_dir = os.path.join(out_dir, "logs")
 
 #comparison_file = "gtdb-comparisons.largest-size-diff.n10.csv"
-comparison_file = "family.test-comparisons.csv"
+comparison_file = "family.test-comparisons.n5.csv"
 comparisons = pd.read_csv(comparison_file)
 basename= "comparisons"
 identA= comparisons['identA'].tolist()
 identB= comparisons['identB'].tolist()
-IDENTS = list(set(identA+identB))
+#IDENTS = identA+identB
+IDENTS = list(dict.fromkeys(identA + identB)) # rm duplicates but preserve order to make sure copy_genomes rule doesn't get rerun
 KSIZE = [21]
 SCALED = [1,1000]
 
@@ -25,32 +26,24 @@ original_genomedir = "/home/ntpierce/2021-rank-compare/genbank/genomes"
 
 rule all:
     input: 
-        os.path.join(out_dir, "genomes", "genome-filepaths.txt"),
-        expand(os.path.join(out_dir, "genomes", "{acc}_genomic.fna"), acc=IDENTS),
-        os.path.join(out_dir, "sourmash", "signatures.zip"),
+        #os.path.join(out_dir, "genomes", "genome-filepaths.txt"),
+        #expand(os.path.join(out_dir, "genomes", "{acc}_genomic.fna"), acc=IDENTS),
+        #os.path.join(out_dir, "sourmash", "signatures.zip"),
         expand(os.path.join(out_dir, "sourmash", f"{basename}.k{{ksize}}-sc{{scaled}}.cANI.csv"), ksize=[21], scaled=[1,1000]),
         os.path.join(out_dir, "combinedANI.csv"),
-
-def get_all_genomes(w):
-    comparison_accs = IDENTS
-    genomes = []
-    for acc in comparison_accs:
-        genome_file = os.path.join(original_genomedir, f"{acc}_genomic.fna.gz")
-        genomes.append(genome_file)
-    return genomes
 
 ### split into genome folders + unzip fna files and generate classes/labels, then run pyANI index and compare
 # make a folder with all genomes
 rule copy_and_unzip_genomes:
     input:
-        get_all_genomes
+        expand(os.path.join(original_genomedir, "{acc}_genomic.fna.gz"),acc=IDENTS)
     output:
         classes=os.path.join(out_dir, "genomes", "py.classes.txt"),
         labels=os.path.join(out_dir, "genomes", "py.labels.txt"),
         genomes=expand(os.path.join(out_dir, "genomes", "{acc}_genomic.fna"), acc=IDENTS),
     params:
         acc_list = IDENTS,
-        genome_dir = lambda w: os.path.join(out_dir, 'genomes'),
+        genome_dir = os.path.join(out_dir, 'genomes'),
     resources:
         mem_mb=lambda wildcards, attempt: attempt *3000,
         time=1200,
@@ -117,13 +110,15 @@ rule sourmash_api_compare:
     input: 
         sigs=os.path.join(out_dir, "sourmash", "signatures.zip"),
         comparisons=comparison_file,#COMPARISON_FILES
-    output: os.path.join(out_dir, "sourmash", "{basename}.k{ksize}-sc{scaled}.cANI.csv")
+    output: 
+        compare_csv=os.path.join(out_dir, "sourmash", "{basename}.k{ksize}-sc{scaled}.comparison-info.csv"),
+        ani_csv=os.path.join(out_dir, "sourmash", "{basename}.k{ksize}-sc{scaled}.cANI.csv")
     conda: "conf/env/sourmash.yml"
     log: os.path.join(logs_dir, "sourmash", "{basename}.k{ksize}-sc{scaled}.api-compare.log")
     benchmark: os.path.join(logs_dir, "sourmash", "{basename}.k{ksize}-sc{scaled}.api-compare.benchmark")
     shell:
         """
-        python sourmash-api-compare.py {input.sigs} -c {input.comparisons} -o {output} 2> {log}
+        python sourmash-api-compare.py {input.sigs} -c {input.comparisons} -o {output.compare_csv} --ani-csv {output.ani_csv} 2> {log}
         """
 
 rule pyani_index_and_createdb:
@@ -133,10 +128,10 @@ rule pyani_index_and_createdb:
     output:
         classes=os.path.join(out_dir, "genomes", "classes.txt"),
         labels=os.path.join(out_dir, "genomes", "labels.txt"),
-        db=os.path.join(out_dir, "genomes", ".pyanidb")
+        db=os.path.join(out_dir, "genomes", ".pyanidb"),
     params:
-        genome_dir = lambda w: os.path.join(out_dir, 'genomes'),
-        pyanidb = lambda w: os.path.join(out_dir, 'genomes',f".pyanidb"),
+        genome_dir = os.path.join(out_dir, 'genomes'),
+        pyanidb = os.path.join(out_dir, 'genomes',f".pyanidb"),
         classes_basename = "classes.txt",
         labels_basename = "labels.txt"
     resources:
@@ -253,7 +248,7 @@ rule combine_ani:
     resources:
         mem_mb=lambda wildcards, attempt: attempt *3000,
         time=12000,
-        partition=",ed2",
+        partition="med2",
     log: os.path.join(logs_dir, "combine-ani", "combine-ani.log")
     benchmark: os.path.join(logs_dir, "combine-ani", "combine-ani.benchmark")
     shell:
