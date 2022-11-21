@@ -20,6 +20,7 @@ from sourmash.logging import notify
 def main(args):
     ksize=args.ksize
     scaled=args.scaled
+    ani_thresh=args.ani_threshold
 
     CompareResult = namedtuple('CompareResult', ['comparison_name', 'identA', 'identB',
                                                  'ksize', 'scaled', 'avg_cANI', 'jaccard',
@@ -66,8 +67,9 @@ def main(args):
                              cANI_1, contain2, cANI_2, idA_sc_hashes, idB_sc_hashes, \
                              cmp.total_unique_intersect_hashes)
         results.append(res)
-        ani_res = ANIResult(comparison_name, idA, idB, cmp.avg_containment_ani)
-        ani_results.append(ani_res)
+        if cmp.avg_containment_ani >= ani_thresh:
+            ani_res = ANIResult(comparison_name, idA, idB, cmp.avg_containment_ani)
+            ani_results.append(ani_res)
 
     # convert comparison info to pandas dataframe
     comparisonDF = pd.DataFrame.from_records(results, columns = CompareResult._fields)
@@ -86,6 +88,7 @@ def cmdline(sys_args):
     p.add_argument('-c', "--comparison-csv")
     p.add_argument('-k', "--ksize", default=21, type=int)
     p.add_argument('-s', "--scaled", default=1000, type=int)
+    p.add_argument("-t", "--ani-threshold", default=0.0, type=float)
     p.add_argument("-a", "--ani-csv", required=True)
     p.add_argument("-o", "--output-csv", required=True)
     args = p.parse_args()

@@ -1,36 +1,50 @@
 import os
+import csv
 import pandas as pd
+
 # compare different ANI methods on a series of genomes
 
-out_dir = "output.ani-compare-test"
+#out_dir = "output.ani-compare-test"
+#out_dir = "output.ani-compare-sizediff"
+#out_dir = "output.ani-compare-twopergen"
+#out_dir = "output.ani-compare-reps200"
+#out_dir = "output.ani-compare-reps100"
+#out_dir = "output.ani-compare-2sp100"
+out_dir = "output.ani-compare-informed-test"
 logs_dir = os.path.join(out_dir, "logs")
 
 #comparison_file = "gtdb-comparisons.largest-size-diff.n10.csv"
-comparison_file = "family.test-comparisons.n5.csv"
+#comparison_file = "family.test-comparisons.n5.csv"
+#comparison_file = "gtdb-comparisons.reps500plus.largest-size-diff.n15.csv"
+#comparison_file = "gtdb-comparisons.reps500plus.largest-size-diff.n100.csv"
+#comparison_file = "gtdb-comparisons.two-per-genus.n100.csv"
+#comparison_file = "gtdb-comparisons.reps.n200.csv"
+#comparison_file = "gtdb-comparisons.reps.n100.csv"
+#comparison_file = "gtdb-comparisons.two-per-species.n100.csv"
+comparison_file = "informed-test.csv"
 comparisons = pd.read_csv(comparison_file)
 basename= "comparisons"
 identA= comparisons['identA'].tolist()
 identB= comparisons['identB'].tolist()
-#IDENTS = identA+identB
 IDENTS = list(dict.fromkeys(identA + identB)) # rm duplicates but preserve order to make sure copy_genomes rule doesn't get rerun
+PAIRS = zip(identA, identB)
+COMPARISONS = [f"{a}_x_{b}" for a,b in PAIRS][:2]
+print(len(COMPARISONS))
 KSIZE = [21]
-SCALED = [1,1000]
+SCALED = [1000]
 
 
 original_genomedir = "/home/ntpierce/2021-rank-compare/genbank/genomes"
-
-# read in comparison file; get all IDENTS + use them to copy genoms + run pyani/fastani
-# parse pyani, fastani output for desired comparisons
-# report
-# smash: use signatures from k21 zipfile? or just rebuild sigs from fasta files?
 
 rule all:
     input: 
         #os.path.join(out_dir, "genomes", "genome-filepaths.txt"),
         #expand(os.path.join(out_dir, "genomes", "{acc}_genomic.fna"), acc=IDENTS),
         #os.path.join(out_dir, "sourmash", "signatures.zip"),
-        expand(os.path.join(out_dir, "sourmash", f"{basename}.k{{ksize}}-sc{{scaled}}.cANI.csv"), ksize=[21], scaled=[1,1000]),
-        os.path.join(out_dir, "combinedANI.csv"),
+#        os.path.join(out_dir, "orthoani", "orthoani.ANI.csv"),
+        os.path.join(out_dir, "mash", "mash.ANI.csv"),
+        #expand(os.path.join(out_dir, "sourmash", f"{basename}.k{{ksize}}-sc{{scaled}}.cANI.csv"), ksize=KSIZE, scaled=SCALED),
+        #os.path.join(out_dir, "combinedANI.csv"),
 
 ### split into genome folders + unzip fna files and generate classes/labels, then run pyANI index and compare
 # make a folder with all genomes
@@ -51,33 +65,35 @@ rule copy_and_unzip_genomes:
     run:
         import hashlib
         os.makedirs(params.genome_dir, exist_ok=True)
-        with open(output.classes, 'w') as out_classes:
-            with open(output.labels, 'w') as out_labels:
-                for acc in params.acc_list:
-                    fn = os.path.join(original_genomedir, f"{acc}_genomic.fna.gz") 
-                    dest = os.path.join(params.genome_dir, f"{acc}_genomic.fna.gz")
-                    dest_unz = os.path.join(params.genome_dir, f"{acc}_genomic.fna")
-                    md5_file = os.path.join(params.genome_dir, f"{acc}_genomic.md5")
-                    shell("cp {fn} {dest}") # do we need both gzipped and unzipped versions??
-                    shell("gunzip -c {fn} > {dest_unz}")
-                    # get md5 of unzipped fna
-                    with open(dest_unz, "rb") as f:
-                        bytes = f.read()
-                        md5 = hashlib.md5(bytes).hexdigest()
-                    # write to md5 file
-                    with open(md5_file, 'w') as mfile:
-                        mfile.write(f"{md5}\t{dest_unz}\n")
-                    fna_base = os.path.basename(dest_unz).rsplit('.fna')[0]
-                    out_classes.write(f"{md5}\t{fna_base}\t{acc}\n")
-                    out_labels.write(f"{md5}\t{fna_base}\t{acc}\n")
+        with open(output.classes, 'w') as out_classes, open(output.labels, 'w') as out_labels:
+            for acc in params.acc_list:
+                fn = os.path.join(original_genomedir, f"{acc}_genomic.fna.gz")
+                #dest = os.path.join(params.genome_dir, f"{acc}_genomic.fna.gz")
+                dest_unz = os.path.join(params.genome_dir, f"{acc}_genomic.fna")
+                md5_file = os.path.join(params.genome_dir, f"{acc}_genomic.md5")
+                #shell("cp {fn} {dest}") # do we need both gzipped and unzipped versions??
+                shell("gunzip -c {fn} > {dest_unz}")
+                # get md5 of unzipped fna
+                with open(dest_unz, "rb") as f:
+                    bytes = f.read()
+                    md5 = hashlib.md5(bytes).hexdigest()
+                # write to md5 file
+                with open(md5_file, 'w') as mfile:
+                    mfile.write(f"{md5}\t{dest_unz}\n")
+                fna_base = os.path.basename(dest_unz).rsplit('.fna')[0]
+                out_classes.write(f"{md5}\t{fna_base}\t{acc}\n")
+                out_labels.write(f"{md5}\t{fna_base}\t{acc}\n")
 
 # we copy all the fasta files to the genome_dir for pyani, so we can just use those paths here
-rule build_genome_filepaths:
+rule build_genome_info_files:
+    input:
+        expand(os.path.join(original_genomedir, "{acc}_genomic.fna.gz"),acc=IDENTS),
     output:
         filepaths=os.path.join(out_dir, "genomes", "genome-filepaths.txt"),
         fromfile_csv=os.path.join(out_dir, "genomes", "fromfile.csv")
     params:
-        genome_dir=os.path.join(out_dir, "genomes")
+        genome_dir=os.path.join(out_dir, "genomes"),
+        original_genomedir = original_genomedir,
     resources:
         mem_mb=lambda wildcards, attempt: attempt *3000,
         time=1200,
@@ -87,22 +103,23 @@ rule build_genome_filepaths:
             acc_list = IDENTS
             ff_out.write('name,genome_filename,protein_filename\n')
             for acc in acc_list:
-                fn = os.path.join(params.genome_dir, f"{acc}_genomic.fna")
-                out.write(f"{fn}\n")
-                ff_out.write(f"{acc},{fn},\n")
+                new_fn = os.path.join(params.genome_dir, f"{acc}_genomic.fna")
+                out.write(f"{new_fn}\n")
+                orig_fn = os.path.join(params.original_genomedir, f"{acc}_genomic.fna.gz")
+                ff_out.write(f"{acc},{orig_fn},\n")
 
 # sourmash
-# rebuild sigs so we can use k21, k31, k51, scaled = 1 so we can do scaled= 1,10,1000 comparisons
-
 rule sourmash_sketch:
     input: os.path.join(out_dir, "genomes", "fromfile.csv")
     output: os.path.join(out_dir, "sourmash", "signatures.zip")
     conda: "conf/env/sourmash.yml"
+    params:
+        scaled=min(SCALED),
     log: os.path.join(logs_dir, "sourmash", "sketch.log")
     benchmark: os.path.join(logs_dir, "sourmash", "sketch.benchmark")
     shell:
         """
-        sourmash sketch fromfile {input} -p dna,k=21,k=31,k=51,scaled=1 -o {output} > {log}
+        sourmash sketch fromfile {input} -p dna,k=21,k=31,k=51,scaled={params.scaled} -o {output} > {log}
         """
 
 # just use python api -- not very many comparisons
@@ -118,7 +135,9 @@ rule sourmash_api_compare:
     benchmark: os.path.join(logs_dir, "sourmash", "{basename}.k{ksize}-sc{scaled}.api-compare.benchmark")
     shell:
         """
-        python sourmash-api-compare.py {input.sigs} -c {input.comparisons} -o {output.compare_csv} --ani-csv {output.ani_csv} 2> {log}
+        python sourmash-api-compare.py {input.sigs} -c {input.comparisons} \
+                                       -o {output.compare_csv}  --ani-threshold 0.2 \
+                                       --ani-csv {output.ani_csv} 2> {log}
         """
 
 rule pyani_index_and_createdb:
@@ -179,8 +198,8 @@ rule pyANI_ANIb:
              --force > {log}
         """
 
-#localrules: aggregate_ranktax_anib
-rule aggregate_ranktax_anib:
+localrules: aggregate_anib
+rule aggregate_anib:
     input:
         comparisons=comparison_file,
         covF= os.path.join(out_dir, "pyani/ANIb_results", "ANIb_alignment_coverage.tab"),
@@ -192,7 +211,6 @@ rule aggregate_ranktax_anib:
         os.path.join(out_dir, "pyani", "pyani.ANIb.csv"),
     params:
         results_dir =  os.path.join(out_dir, "pyani/ANIb_results"),
-        #compare_rank = compare_rank,
     resources:
         mem_mb=lambda wildcards, attempt: attempt *3000,
         time=1200,
@@ -201,7 +219,6 @@ rule aggregate_ranktax_anib:
         """
         python aggregate-pyani-results.py {params.results_dir} --pyani-version 0.2 -c {input.comparisons} -o {output}
         """
-#--rank {params.compare_rank} --ranktax-name {wildcards.ranktax} --output-csv {output} --pyani-version v0.2
 
 rule compare_via_fastANI:
     input: os.path.join(out_dir, "genomes", "genome-filepaths.txt")
@@ -238,11 +255,122 @@ rule parse_fastani:
                                         --output-csv {output} 2> {log}
         """
 
+rule download_usearch:
+    output: "conf/env/usearch11.0.667_i86linux32",
+    params:
+        link="http://www.drive5.com/downloads/usearch11.0.667_i86linux32.gz",
+        dl_name="usearch11.0.667_i86linux32.gz",
+    shell:
+        """
+        curl -JLO {params.link}
+        gunzip -c {params.dl_name} > {output}
+        chmod a+rx {output}
+        rm {params.dl_name}
+        """
+
+rule mash_sketch:
+    input: os.path.join(out_dir, "genomes", "{genome}_genomic.fna"),
+    output:
+        os.path.join(out_dir, "mash", "{genome}_genomic.msh"),
+    conda: "conf/env/mash.yml"
+    log: os.path.join(logs_dir, "mash", "{genome}.sketch.log")
+    benchmark: os.path.join(logs_dir, "sourmash", "{genome}.sketch.benchmark")
+    shell:
+        """
+        mash sketch {input} -o {output} 2> {log}
+        """
+
+rule mash_dist:
+    input:
+        gA= os.path.join(out_dir, "mash", "{gA}_genomic.msh"),
+        gB= os.path.join(out_dir, "mash", "{gB}_genomic.msh"),
+    output: os.path.join(out_dir, "mash", "{gA}_x_{gB}.mashdist.tsv") 
+    conda: "conf/env/mash.yml"
+    log: os.path.join(logs_dir, "mash", "{gA}_x_{gB}.dist.log")
+    benchmark: os.path.join(logs_dir, "mash", "{gA}_x_{gB}.dist.benchmark")
+    shell:
+        """
+        mash dist {input.gA} {input.gB} > {output} 2> {log}
+        """
+
+rule aggregate_pairwise_mash:
+    input: expand(os.path.join(out_dir, "mash", "{comp}.mashdist.tsv"), comp=COMPARISONS),
+    output: os.path.join(out_dir, "mash", "mash.ANI.csv")
+    run:
+        # Mash columns: Reference-ID, Query-ID, Mash-distance, P-value, and Matching-hashes
+        results = []
+        header = ["comparison_name", "identA", "identB", "MashDistance", "Mash_pvalue", "Mash_matchinghashes", "MashANI"]
+        for inF in input:
+            inF = str(inF)
+            comparison_name = inF.rsplit(".orthoani.txt")[0]
+            identA, identB = comparison_name.split("_x_")
+            with open(str(inF), 'r') as res:
+                result = [comparison_name, identA, identB] + res.readlines()[-1].split('\t')[2:]
+                mashdist = float(result[3])*100
+                est_ani = 100 - mashdist
+                result.append(est_ani)
+                results.append(result)
+        with open(str(output), 'w') as csv_out:
+            csvwriter = csv.writer(csv_out, delimiter=',')
+            csvwriter.writerow(header)
+            for res in results:
+                csvwriter.writerow(res)
+
+
+# need to dl OAU manually and scp to hpc:  http://www.ezbiocloud.net/download2/download_oau
+rule orthoani_pairwise:
+    input: 
+        gA= os.path.join(out_dir, "genomes", "{gA}_genomic.fna"),
+        gB= os.path.join(out_dir, "genomes", "{gB}_genomic.fna"),
+        usearch="conf/env/usearch11.0.667_i86linux32",
+    output: os.path.join(out_dir, "orthoani", "{gA}_x_{gB}.orthoani.txt")
+    params:
+        genome_dir=os.path.abspath(os.path.join(out_dir, "genomes")),
+        outdir=os.path.abspath(os.path.join(out_dir, "orthoani")),
+        oau=os.path.abspath("conf/env/OAU.jar"),
+        usearch=os.path.abspath("conf/env/usearch11.0.667_i86linux32"),
+    threads: 1
+    conda: "conf/env/orthoani.yml"
+    resources:
+        mem_mb=lambda wildcards, attempt: attempt *3000,
+        time=12000,
+        partition="med2",
+    log: os.path.join(logs_dir, "orthoani", "{gA}_x_{gB}.orthoani.log")
+    benchmark: os.path.join(logs_dir, "orthoani", "{gA}_x_{gB}.orthoani.benchmark")
+    shell:
+        """
+        java -jar {params.oau:q} --upath {params.usearch} -f1 {input.gA} -f2 {input.gB} \
+                   --format list --threads {threads} > {output} 2> {log}
+        """
+#--tmp {params.tmp} 
+# -fmt,--format <arg>    Output format (optional, default: list, possible options: list, matrix, json) 
+
+rule aggregate_pairwise_orthoani:
+    input: expand(os.path.join(out_dir, "orthoani", "{comp}.orthoani.txt"), comp=COMPARISONS),
+    output: os.path.join(out_dir, "orthoani", "orthoani.ANI.csv")
+    run:
+        results = []
+        header = ["comparison_name", "identA", "identB", "orthoANI_value", "orthoANI_avg_aligned_length", "orthoANI_query_coverage", "orthoANI_subject_coverage", "orthoANI_query_length", "orthoANI_subject_length"]
+        for inF in input:
+            inF = str(inF)
+            comparison_name = inF.rsplit(".orthoani.txt")[0]
+            identA, identB = comparison_name.split("_x_")
+            with open(str(inF), 'r') as res:
+                result = [comparison_name, identA, identB] + res.readlines()[-1].split('\t')[1:]
+                results.append(result)
+        with open(str(output), 'w') as csv_out:
+            csvwriter = csv.writer(csv_out, delimiter=',')
+            csvwriter.writerow(header)
+            for res in results:
+                csvwriter.writerow(res)
+
+
 localrules: combine_ani
 rule combine_ani:
     input: 
         fastani= os.path.join(out_dir, "fastani", "fastani.ANI.csv"),
         pyani=os.path.join(out_dir, "pyani", "pyani.ANIb.csv"),
+        orthoani=os.path.join(out_dir, "orthoani", "orthoani.ANI.csv"),
         sourmash=expand(os.path.join(out_dir, "sourmash", f"{basename}.k{{ksize}}-sc{{scaled}}.cANI.csv"), ksize=KSIZE, scaled=SCALED),
     output: os.path.join(out_dir, "combinedANI.csv")
     resources:
@@ -256,4 +384,36 @@ rule combine_ani:
         python combine-ani.py --fastani {input.fastani} --pyani {input.pyani} \
                               --sourmash {input.sourmash} --output-csv {output} 2> {log}
         """
+
+
+## unused rules ##
+
+#rule orthoani:
+#    input: 
+#        genomes=ancient(expand(os.path.join(out_dir, "genomes", "{acc}_genomic.fna"), acc=IDENTS)),
+#        usearch="conf/env/usearch11.0.667_i86linux32",
+#    output: os.path.join(out_dir, "orthoani", "orthoani.ANI.tsv")
+#    params:
+#        genome_dir=os.path.abspath(os.path.join(out_dir, "genomes")),
+#        outdir=os.path.abspath(os.path.join(out_dir, "orthoani")),
+#        oau=os.path.abspath("conf/env/OAU.jar"),
+#        usearch=os.path.abspath("conf/env/usearch11.0.667_i86linux32"),
+#        #tmp="/scratch/ntpierce"
+#        #tmp="/tmp"
+#    threads: 6
+#    conda: "conf/env/orthoani.yml"
+#    resources:
+#        mem_mb=lambda wildcards, attempt: attempt *3000,
+#        time=12000,
+#        partition="med2",
+#    log: os.path.join(logs_dir, "orthoani", "orthoani.log")
+#    benchmark: os.path.join(logs_dir, "orthoani", "orthoani.benchmark")
+#    shell:
+#        """
+#        java -jar {params.oau:q} --upath {params.usearch} --fastadir {params.genome_dir} \
+#                   --format list --threads {threads} -o {params.outdir} 2> {log}
+#        """
+#--tmp {params.tmp} 
+# -fmt,--format <arg>    Output format (optional, default: list, possible options: list, matrix, json) 
+
 
