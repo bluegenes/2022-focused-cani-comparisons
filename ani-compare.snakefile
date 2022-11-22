@@ -10,7 +10,8 @@ import pandas as pd
 #out_dir = "output.ani-compare-reps200"
 #out_dir = "output.ani-compare-reps100"
 #out_dir = "output.ani-compare-2sp100"
-out_dir = "output.ani-compare-informed-test"
+#out_dir = "output.ani-compare-informed-test"
+out_dir = "output.ani-commonsp20-evolpath"
 logs_dir = os.path.join(out_dir, "logs")
 
 #comparison_file = "gtdb-comparisons.largest-size-diff.n10.csv"
@@ -21,7 +22,8 @@ logs_dir = os.path.join(out_dir, "logs")
 #comparison_file = "gtdb-comparisons.reps.n200.csv"
 #comparison_file = "gtdb-comparisons.reps.n100.csv"
 #comparison_file = "gtdb-comparisons.two-per-species.n100.csv"
-comparison_file = "informed-test.csv"
+#comparison_file = "informed-test.csv"
+comparison_file = "gtdb-rs207.common-sp20-evolpaths.csv"
 comparisons = pd.read_csv(comparison_file)
 basename= "comparisons"
 identA= comparisons['identA'].tolist()
