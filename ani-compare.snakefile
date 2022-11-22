@@ -28,8 +28,7 @@ identA= comparisons['identA'].tolist()
 identB= comparisons['identB'].tolist()
 IDENTS = list(dict.fromkeys(identA + identB)) # rm duplicates but preserve order to make sure copy_genomes rule doesn't get rerun
 PAIRS = zip(identA, identB)
-COMPARISONS = [f"{a}_x_{b}" for a,b in PAIRS][:2]
-print(len(COMPARISONS))
+COMPARISONS = [f"{a}_x_{b}" for a,b in PAIRS]
 KSIZE = [21]
 SCALED = [1000]
 
@@ -38,13 +37,13 @@ original_genomedir = "/home/ntpierce/2021-rank-compare/genbank/genomes"
 
 rule all:
     input: 
+        os.path.join(out_dir, "combinedANI.csv"),
         #os.path.join(out_dir, "genomes", "genome-filepaths.txt"),
         #expand(os.path.join(out_dir, "genomes", "{acc}_genomic.fna"), acc=IDENTS),
         #os.path.join(out_dir, "sourmash", "signatures.zip"),
 #        os.path.join(out_dir, "orthoani", "orthoani.ANI.csv"),
-        os.path.join(out_dir, "mash", "mash.ANI.csv"),
+#        os.path.join(out_dir, "mash", "mash.ANI.csv"),
         #expand(os.path.join(out_dir, "sourmash", f"{basename}.k{{ksize}}-sc{{scaled}}.cANI.csv"), ksize=KSIZE, scaled=SCALED),
-        #os.path.join(out_dir, "combinedANI.csv"),
 
 ### split into genome folders + unzip fna files and generate classes/labels, then run pyANI index and compare
 # make a folder with all genomes
@@ -61,7 +60,7 @@ rule copy_and_unzip_genomes:
     resources:
         mem_mb=lambda wildcards, attempt: attempt *3000,
         time=1200,
-        partition="med2",
+        partition="bmh",
     run:
         import hashlib
         os.makedirs(params.genome_dir, exist_ok=True)
@@ -97,7 +96,7 @@ rule build_genome_info_files:
     resources:
         mem_mb=lambda wildcards, attempt: attempt *3000,
         time=1200,
-        partition="med2",
+        partition="bmh",
     run:
         with open(str(output.filepaths), "w") as out, open(str(output.fromfile_csv), 'w') as ff_out:
             acc_list = IDENTS
@@ -156,7 +155,7 @@ rule pyani_index_and_createdb:
     resources:
         mem_mb=lambda wildcards, attempt: attempt *20000,
         time=1200,
-        partition="bmm",
+        partition="bmh",
     log: os.path.join(logs_dir, "pyani", "index-and-createdb.log")
     benchmark: os.path.join(logs_dir, "pyani", "index-and-createdb.benchmark")
     conda: "conf/env/pyani0.3.yml"
@@ -183,7 +182,7 @@ rule pyANI_ANIb:
     resources:
         mem_mb=lambda wildcards, attempt: attempt *10000,
         time=1200,
-        partition="med2"
+        partition="bmh",#"med2"
     params:
         genome_dir = lambda w: os.path.join(out_dir, 'genomes'),
         output_dir = lambda w: os.path.join(out_dir, 'pyani', "ANIb_results"),
@@ -214,7 +213,6 @@ rule aggregate_anib:
     resources:
         mem_mb=lambda wildcards, attempt: attempt *3000,
         time=1200,
-        partition="med2"
     shell:
         """
         python aggregate-pyani-results.py {params.results_dir} --pyani-version 0.2 -c {input.comparisons} -o {output}
@@ -246,7 +244,6 @@ rule parse_fastani:
     resources:
         mem_mb=lambda wildcards, attempt: attempt *3000,
         time=12000,
-        partition="med2",
     log: os.path.join(logs_dir, "fastani", "parse_fastani.log")
     benchmark: os.path.join(logs_dir, "fastani", "parse_fastani.benchmark")
     shell:
@@ -317,24 +314,22 @@ rule aggregate_pairwise_mash:
                 csvwriter.writerow(res)
 
 
-# need to dl OAU manually and scp to hpc:  http://www.ezbiocloud.net/download2/download_oau
+# need to dl OAU manually and scp to hpc. download link: http://www.ezbiocloud.net/download2/download_oau
 rule orthoani_pairwise:
     input: 
-        gA= os.path.join(out_dir, "genomes", "{gA}_genomic.fna"),
-        gB= os.path.join(out_dir, "genomes", "{gB}_genomic.fna"),
+        gA= ancient(os.path.join(out_dir, "genomes", "{gA}_genomic.fna")),
+        gB= ancient(os.path.join(out_dir, "genomes", "{gB}_genomic.fna")),
         usearch="conf/env/usearch11.0.667_i86linux32",
     output: os.path.join(out_dir, "orthoani", "{gA}_x_{gB}.orthoani.txt")
     params:
-        genome_dir=os.path.abspath(os.path.join(out_dir, "genomes")),
-        outdir=os.path.abspath(os.path.join(out_dir, "orthoani")),
         oau=os.path.abspath("conf/env/OAU.jar"),
         usearch=os.path.abspath("conf/env/usearch11.0.667_i86linux32"),
     threads: 1
     conda: "conf/env/orthoani.yml"
     resources:
         mem_mb=lambda wildcards, attempt: attempt *3000,
-        time=12000,
-        partition="med2",
+        time=240,
+        partition="high2", #"low2",#"med2",
     log: os.path.join(logs_dir, "orthoani", "{gA}_x_{gB}.orthoani.log")
     benchmark: os.path.join(logs_dir, "orthoani", "{gA}_x_{gB}.orthoani.benchmark")
     shell:
@@ -353,10 +348,10 @@ rule aggregate_pairwise_orthoani:
         header = ["comparison_name", "identA", "identB", "orthoANI_value", "orthoANI_avg_aligned_length", "orthoANI_query_coverage", "orthoANI_subject_coverage", "orthoANI_query_length", "orthoANI_subject_length"]
         for inF in input:
             inF = str(inF)
-            comparison_name = inF.rsplit(".orthoani.txt")[0]
+            comparison_name = os.path.basename(inF).rsplit(".orthoani.txt")[0]
             identA, identB = comparison_name.split("_x_")
             with open(str(inF), 'r') as res:
-                result = [comparison_name, identA, identB] + res.readlines()[-1].split('\t')[1:]
+                result = [comparison_name, identA, identB] + res.readlines()[-1].rsplit('\n')[0].split('\t')[1:]
                 results.append(result)
         with open(str(output), 'w') as csv_out:
             csvwriter = csv.writer(csv_out, delimiter=',')
@@ -371,22 +366,23 @@ rule combine_ani:
         fastani= os.path.join(out_dir, "fastani", "fastani.ANI.csv"),
         pyani=os.path.join(out_dir, "pyani", "pyani.ANIb.csv"),
         orthoani=os.path.join(out_dir, "orthoani", "orthoani.ANI.csv"),
+        mash=os.path.join(out_dir, "mash", "mash.ANI.csv"),
         sourmash=expand(os.path.join(out_dir, "sourmash", f"{basename}.k{{ksize}}-sc{{scaled}}.cANI.csv"), ksize=KSIZE, scaled=SCALED),
     output: os.path.join(out_dir, "combinedANI.csv")
     resources:
         mem_mb=lambda wildcards, attempt: attempt *3000,
         time=12000,
-        partition="med2",
     log: os.path.join(logs_dir, "combine-ani", "combine-ani.log")
     benchmark: os.path.join(logs_dir, "combine-ani", "combine-ani.benchmark")
     shell:
         """
         python combine-ani.py --fastani {input.fastani} --pyani {input.pyani} \
-                              --sourmash {input.sourmash} --output-csv {output} 2> {log}
+                              --sourmash {input.sourmash} --orthoani {input.orthoani} \
+                              --mash {input.mash} --output-csv {output} 2> {log}
         """
 
 
-## unused rules ##
+## unused (but working) rules ##
 
 #rule orthoani:
 #    input: 
