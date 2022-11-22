@@ -114,6 +114,10 @@ rule sourmash_sketch:
     conda: "conf/env/sourmash.yml"
     params:
         scaled=min(SCALED),
+    resources:
+        mem_mb=lambda wildcards, attempt: attempt *3000,
+        time=240,
+        partition="high2", #"low2",
     log: os.path.join(logs_dir, "sourmash", "sketch.log")
     benchmark: os.path.join(logs_dir, "sourmash", "sketch.benchmark")
     shell:
@@ -130,6 +134,10 @@ rule sourmash_api_compare:
         compare_csv=os.path.join(out_dir, "sourmash", "{basename}.k{ksize}-sc{scaled}.comparison-info.csv"),
         ani_csv=os.path.join(out_dir, "sourmash", "{basename}.k{ksize}-sc{scaled}.cANI.csv")
     conda: "conf/env/sourmash.yml"
+    resources:
+        mem_mb=lambda wildcards, attempt: attempt *3000,
+        time=240,
+        partition="high2", #"low2",
     log: os.path.join(logs_dir, "sourmash", "{basename}.k{ksize}-sc{scaled}.api-compare.log")
     benchmark: os.path.join(logs_dir, "sourmash", "{basename}.k{ksize}-sc{scaled}.api-compare.benchmark")
     shell:
@@ -152,8 +160,9 @@ rule pyani_index_and_createdb:
         pyanidb = os.path.join(out_dir, 'genomes',f".pyanidb"),
         classes_basename = "classes.txt",
         labels_basename = "labels.txt"
+    threads: 1
     resources:
-        mem_mb=lambda wildcards, attempt: attempt *20000,
+        mem_mb=lambda wildcards, attempt: attempt *6000,
         time=1200,
         partition="bmh",
     log: os.path.join(logs_dir, "pyani", "index-and-createdb.log")
@@ -180,8 +189,8 @@ rule pyANI_ANIb:
         bn =  os.path.join(out_dir, "pyani/ANIb_results","blastn_output.tar.gz"),
     threads: 1
     resources:
-        mem_mb=lambda wildcards, attempt: attempt *10000,
-        time=1200,
+        mem_mb=lambda wildcards, attempt: attempt *20000,
+        time=120000,
         partition="bmh",#"med2"
     params:
         genome_dir = lambda w: os.path.join(out_dir, 'genomes'),
@@ -218,14 +227,14 @@ rule aggregate_anib:
         python aggregate-pyani-results.py {params.results_dir} --pyani-version 0.2 -c {input.comparisons} -o {output}
         """
 
-rule compare_via_fastANI:
+rule fastANI:
     input: os.path.join(out_dir, "genomes", "genome-filepaths.txt")
     output: os.path.join(out_dir, "fastani","fastani.tsv"),
-    threads: 11
+    threads: 12
     resources:
         mem_mb=lambda wildcards, attempt: attempt *20000,
         time=12000,
-        partition="bmm",
+        partition="high2",
     log: os.path.join(logs_dir, "fastani", "fastani.log")
     benchmark: os.path.join(logs_dir, "fastani", "fastani.benchmark")
     conda: "conf/env/fastani.yml"
@@ -252,6 +261,7 @@ rule parse_fastani:
                                         --output-csv {output} 2> {log}
         """
 
+localrules: download_usearch
 rule download_usearch:
     output: "conf/env/usearch11.0.667_i86linux32",
     params:
@@ -270,6 +280,10 @@ rule mash_sketch:
     output:
         os.path.join(out_dir, "mash", "{genome}_genomic.msh"),
     conda: "conf/env/mash.yml"
+    resources:
+        mem_mb=lambda wildcards, attempt: attempt *3000,
+        time=240,
+        partition="high2",#"low2",
     log: os.path.join(logs_dir, "mash", "{genome}.sketch.log")
     benchmark: os.path.join(logs_dir, "sourmash", "{genome}.sketch.benchmark")
     shell:
@@ -283,6 +297,10 @@ rule mash_dist:
         gB= os.path.join(out_dir, "mash", "{gB}_genomic.msh"),
     output: os.path.join(out_dir, "mash", "{gA}_x_{gB}.mashdist.tsv") 
     conda: "conf/env/mash.yml"
+    resources:
+        mem_mb=lambda wildcards, attempt: attempt *3000,
+        time=240,
+        partition="high2",#"low2",
     log: os.path.join(logs_dir, "mash", "{gA}_x_{gB}.dist.log")
     benchmark: os.path.join(logs_dir, "mash", "{gA}_x_{gB}.dist.benchmark")
     shell:
@@ -290,6 +308,7 @@ rule mash_dist:
         mash dist {input.gA} {input.gB} > {output} 2> {log}
         """
 
+localrules: aggregate_pairwise_mash
 rule aggregate_pairwise_mash:
     input: expand(os.path.join(out_dir, "mash", "{comp}.mashdist.tsv"), comp=COMPARISONS),
     output: os.path.join(out_dir, "mash", "mash.ANI.csv")
@@ -302,7 +321,7 @@ rule aggregate_pairwise_mash:
             comparison_name = inF.rsplit(".orthoani.txt")[0]
             identA, identB = comparison_name.split("_x_")
             with open(str(inF), 'r') as res:
-                result = [comparison_name, identA, identB] + res.readlines()[-1].split('\t')[2:]
+                result = [comparison_name, identA, identB] + res.readlines()[-1].rsplit('\n')[0].split('\t')[2:]
                 mashdist = float(result[3])*100
                 est_ani = 100 - mashdist
                 result.append(est_ani)
@@ -340,6 +359,7 @@ rule orthoani_pairwise:
 #--tmp {params.tmp} 
 # -fmt,--format <arg>    Output format (optional, default: list, possible options: list, matrix, json) 
 
+localrules: aggregate_pairwise_orthoani
 rule aggregate_pairwise_orthoani:
     input: expand(os.path.join(out_dir, "orthoani", "{comp}.orthoani.txt"), comp=COMPARISONS),
     output: os.path.join(out_dir, "orthoani", "orthoani.ANI.csv")
