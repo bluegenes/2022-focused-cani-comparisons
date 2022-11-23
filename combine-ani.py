@@ -39,10 +39,9 @@ def main(args):
     fastani_res = pd.read_csv(args.fastani_csv)
     mash_res = pd.read_csv(args.mash_csv)
     orthoani_res = pd.read_csv(args.orthoani_csv)
+    sourmash_res = [pd.read_csv(f) for f in args.sourmash_csv]
 
-    sourmash_res = pd.concat((pd.read_csv(f) for f in args.sourmash_csv), ignore_index=True)
-
-    ani_dfs = [pyani_res, fastani_res, mash_res, orthoani_res, sourmash_res]
+    ani_dfs = [pyani_res, fastani_res, mash_res, orthoani_res] + sourmash_res
 
     #id_cols = ["comparison_name", "identA", "identB"]
     outer_merge = partial(pd.merge, how='outer')
@@ -64,8 +63,8 @@ def cmdline(sys_args):
     p = argparse.ArgumentParser()
     p.add_argument("-p", "--pyani-csv")
     p.add_argument("-f", "--fastani-csv")
-    p.add_argument("-s", "--mash-csv")
-    p.add_argument("-s", "--orthoani-csv")
+    p.add_argument("-m", "--mash-csv")
+    p.add_argument("--orthoani-csv")
     p.add_argument("-s", "--sourmash-csv", nargs='+')
     p.add_argument("-o", "--output-csv", required=True)
     p.add_argument("-t", "--taxonomy", default="/group/ctbrowngrp/sourmash-db/gtdb-rs207/gtdb-rs207.taxonomy.csv")

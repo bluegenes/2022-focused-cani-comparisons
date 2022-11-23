@@ -11,7 +11,8 @@ import pandas as pd
 #out_dir = "output.ani-compare-reps100"
 #out_dir = "output.ani-compare-2sp100"
 #out_dir = "output.ani-compare-informed-test"
-out_dir = "output.ani-commonsp20-evolpath"
+#out_dir = "output.ani-commonsp20-evolpath"
+out_dir = "output.ani-commonsp10-evolpath"
 logs_dir = os.path.join(out_dir, "logs")
 
 #comparison_file = "gtdb-comparisons.largest-size-diff.n10.csv"
@@ -23,7 +24,8 @@ logs_dir = os.path.join(out_dir, "logs")
 #comparison_file = "gtdb-comparisons.reps.n100.csv"
 #comparison_file = "gtdb-comparisons.two-per-species.n100.csv"
 #comparison_file = "informed-test.csv"
-comparison_file = "gtdb-rs207.common-sp20-evolpaths.csv"
+#comparison_file = "gtdb-rs207.common-sp20-evolpaths.csv"
+comparison_file = "gtdb-rs207.common-sp10-evolpaths.csv"
 comparisons = pd.read_csv(comparison_file)
 basename= "comparisons"
 identA= comparisons['identA'].tolist()
@@ -32,7 +34,7 @@ IDENTS = list(dict.fromkeys(identA + identB)) # rm duplicates but preserve order
 PAIRS = zip(identA, identB)
 COMPARISONS = [f"{a}_x_{b}" for a,b in PAIRS]
 KSIZE = [21]
-SCALED = [1000]
+SCALED = [1, 10, 100, 1000]
 
 
 original_genomedir = "/home/ntpierce/2021-rank-compare/genbank/genomes"
@@ -145,8 +147,8 @@ rule sourmash_api_compare:
     shell:
         """
         python sourmash-api-compare.py {input.sigs} -c {input.comparisons} \
-                                       -o {output.compare_csv}  --ani-threshold 0.2 \
-                                       --ani-csv {output.ani_csv} 2> {log}
+                                       -o {output.compare_csv}  --ani-threshold 0 \
+                                       -s {wildcards.scaled} --ani-csv {output.ani_csv} 2> {log}
         """
 
 rule pyani_index_and_createdb:
@@ -189,9 +191,9 @@ rule pyANI_ANIb:
         idF=  os.path.join(out_dir, "pyani/ANIb_results","ANIb_percentage_identity.tab"),
         seF=  os.path.join(out_dir, "pyani/ANIb_results","ANIb_similarity_errors.tab"),
         bn =  os.path.join(out_dir, "pyani/ANIb_results","blastn_output.tar.gz"),
-    threads: 1
+    threads: 30
     resources:
-        mem_mb=lambda wildcards, attempt: attempt *20000,
+        mem_mb=lambda wildcards, attempt: attempt *50000,
         time=120000,
         partition="bmh",#"med2"
     params:
@@ -203,7 +205,7 @@ rule pyANI_ANIb:
     shell:
         """
         average_nucleotide_identity.py -i {params.genome_dir} \
-             -o {params.output_dir} -m ANIb -v \
+             -o {params.output_dir} -m ANIb -v --workers {threads} \
              --labels {input.labels} --classes {input.classes} \
              --force > {log}
         """
@@ -320,12 +322,12 @@ rule aggregate_pairwise_mash:
         header = ["comparison_name", "identA", "identB", "MashDistance", "Mash_pvalue", "Mash_matchinghashes", "MashANI"]
         for inF in input:
             inF = str(inF)
-            comparison_name = inF.rsplit(".orthoani.txt")[0]
+            comparison_name = os.path.basename(inF).rsplit(".mashdist.tsv")[0]
             identA, identB = comparison_name.split("_x_")
             with open(str(inF), 'r') as res:
                 result = [comparison_name, identA, identB] + res.readlines()[-1].rsplit('\n')[0].split('\t')[2:]
-                mashdist = float(result[3])*100
-                est_ani = 100 - mashdist
+                mashdist = float(result[3])
+                est_ani = 1 - mashdist
                 result.append(est_ani)
                 results.append(result)
         with open(str(output), 'w') as csv_out:

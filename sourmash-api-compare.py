@@ -40,6 +40,8 @@ def main(args):
     # loop through comparisons
     results,ani_results = [], []
     for n, (idA, idB) in enumerate(comparisons):
+        if idA ==idB:
+            raise ValueError("Cannot compare same ident, {idA}")
         if n !=0 and n % 50 == 0:
             notify(f"... assessing {n}th comparison\n")
 
@@ -65,7 +67,7 @@ def main(args):
         res = CompareResult(comparison_name, idA, idB, ksize, scaled, \
                              cmp.avg_containment_ani, cmp.jaccard, contain1, \
                              cANI_1, contain2, cANI_2, idA_sc_hashes, idB_sc_hashes, \
-                             cmp.total_unique_intersect_hashes)
+                             len(cmp.intersect_mh))
         results.append(res)
         if cmp.avg_containment_ani >= ani_thresh:
             ani_res = ANIResult(comparison_name, idA, idB, cmp.avg_containment_ani)
