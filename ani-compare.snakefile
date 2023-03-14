@@ -339,6 +339,7 @@ rule aggregate_pairwise_mash:
 
 # need to dl OAU manually and scp to hpc. download link: http://www.ezbiocloud.net/download2/download_oau
 rule orthoani_pairwise:
+    # NOTE: do not run more than one at a time -- tmp files may collide (I assume) -->  get "-1" as an ANI value.
     input: 
         gA= ancient(os.path.join(out_dir, "genomes", "{gA}_genomic.fna")),
         gB= ancient(os.path.join(out_dir, "genomes", "{gB}_genomic.fna")),
