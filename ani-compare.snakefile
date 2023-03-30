@@ -4,27 +4,9 @@ import pandas as pd
 
 # compare different ANI methods on a series of genomes
 
-#out_dir = "output.ani-compare-test"
-#out_dir = "output.ani-compare-sizediff"
-#out_dir = "output.ani-compare-twopergen"
-#out_dir = "output.ani-compare-reps200"
-#out_dir = "output.ani-compare-reps100"
-#out_dir = "output.ani-compare-2sp100"
-#out_dir = "output.ani-compare-informed-test"
-#out_dir = "output.ani-commonsp20-evolpath"
 out_dir = "output.ani-commonsp10-evolpath"
 logs_dir = os.path.join(out_dir, "logs")
 
-#comparison_file = "gtdb-comparisons.largest-size-diff.n10.csv"
-#comparison_file = "family.test-comparisons.n5.csv"
-#comparison_file = "gtdb-comparisons.reps500plus.largest-size-diff.n15.csv"
-#comparison_file = "gtdb-comparisons.reps500plus.largest-size-diff.n100.csv"
-#comparison_file = "gtdb-comparisons.two-per-genus.n100.csv"
-#comparison_file = "gtdb-comparisons.reps.n200.csv"
-#comparison_file = "gtdb-comparisons.reps.n100.csv"
-#comparison_file = "gtdb-comparisons.two-per-species.n100.csv"
-#comparison_file = "informed-test.csv"
-#comparison_file = "gtdb-rs207.common-sp20-evolpaths.csv"
 comparison_file = "gtdb-rs207.common-sp10-evolpaths.csv"
 comparisons = pd.read_csv(comparison_file)
 basename= "comparisons"
@@ -34,21 +16,15 @@ IDENTS = list(dict.fromkeys(identA + identB)) # rm duplicates but preserve order
 PAIRS = zip(identA, identB)
 COMPARISONS = [f"{a}_x_{b}" for a,b in PAIRS]
 KSIZE = [21]
-#KSIZE = [31]
+#KSIZE = [31] # ran separately, not included in combinedANI.csv since other paper comparisons are k21
 SCALED = [1, 10, 100, 1000]
 
-
+# GTDB genomes are here:
 original_genomedir = "/home/ntpierce/2021-rank-compare/genbank/genomes"
 
 rule all:
     input: 
         os.path.join(out_dir, "combinedANI.csv"),
-        #os.path.join(out_dir, "genomes", "genome-filepaths.txt"),
-        #expand(os.path.join(out_dir, "genomes", "{acc}_genomic.fna"), acc=IDENTS),
-        #os.path.join(out_dir, "sourmash", "signatures.zip"),
-#        os.path.join(out_dir, "orthoani", "orthoani.ANI.csv"),
-#        os.path.join(out_dir, "mash", "mash.ANI.csv"),
-        #expand(os.path.join(out_dir, "sourmash", f"{basename}.k{{ksize}}-sc{{scaled}}.cANI.csv"), ksize=KSIZE, scaled=SCALED),
 
 ### split into genome folders + unzip fna files and generate classes/labels, then run pyANI index and compare
 # make a folder with all genomes
@@ -130,7 +106,7 @@ rule sourmash_sketch:
         sourmash sketch fromfile {input} -p dna,k=21,k=31,k=51,scaled={params.scaled} -o {output} > {log}
         """
 
-# just use python api -- not very many comparisons
+# just use python api -- not very many comparisons and we want to keep some extra info (nhashes, ncommon, etc)
 rule sourmash_api_compare:
     input: 
         sigs=os.path.join(out_dir, "sourmash", "signatures.zip"),
