@@ -24,9 +24,11 @@ def main(args):
 
     CompareResult = namedtuple('CompareResult', ['comparison_name', 'identA', 'identB',
                                                  'ksize', 'scaled', 'avg_cANI', 'jaccard',
-                                                 'idA_in_idB', 'idA_in_idB_cANI', 'idB_in_idA',
-                                                 'idB_in_idA_cANI','idA_hashes', 'idB_hashes',
-                                                 'num_common'])
+                                                 'idA_in_idB', 'idA_in_idB_cANI',
+                                                 'idA_in_idB_cANI_low', 'idA_in_idB_cANI_high',
+                                                 'idB_in_idA', 'idB_in_idA_cANI',
+                                                 'idB_in_idA_cANI_low', 'idB_in_idA_cANI_high',
+                                                 'idA_hashes', 'idB_hashes', 'num_common'])
 
     ANIResult = namedtuple('ANIResult', ['comparison_name', 'identA', 'identB',
                                                  f'avg_cANI_k{ksize}_sc{scaled}'])
@@ -41,7 +43,7 @@ def main(args):
     results,ani_results = [], []
     for n, (idA, idB) in enumerate(comparisons):
         if idA ==idB:
-            raise ValueError("Cannot compare same ident, {idA}")
+            raise ValueError(f"Cannot compare same ident, {idA}")
         if n !=0 and n % 50 == 0:
             notify(f"... assessing {n}th comparison\n")
 
@@ -56,18 +58,25 @@ def main(args):
         ss2 = siglist[1]
         print(ss1.name, ss2.name)
 
-        cmp = FracMinHashComparison(ss1.minhash, ss2.minhash, cmp_scaled=args.scaled)
+        cmp = FracMinHashComparison(ss1.minhash, ss2.minhash, cmp_scaled=args.scaled, estimate_ani_ci = True)
         cmp.estimate_all_containment_ani()
         idA_sc_hashes = len(cmp.mh1_cmp)
         idB_sc_hashes = len(cmp.mh2_cmp)
         contain1 = cmp.mh1_containment_in_mh2
         cANI_1 = cmp.ani_from_mh2_containment_in_mh1
+        cANI_1_low = cmp.ani_from_mh1_containment_in_mh2_low
+        cANI_1_high = cmp.ani_from_mh1_containment_in_mh2_high
+
         contain2 = cmp.mh2_containment_in_mh1
-        cANI_2 = cmp.ani_from_mh1_containment_in_mh2
+        cANI_2 = cmp.ani_from_mh2_containment_in_mh1
+        cANI_2_low = cmp.ani_from_mh2_containment_in_mh1_low
+        cANI_2_high = cmp.ani_from_mh2_containment_in_mh1_high
+
         res = CompareResult(comparison_name, idA, idB, ksize, scaled, \
                              cmp.avg_containment_ani, cmp.jaccard, contain1, \
-                             cANI_1, contain2, cANI_2, idA_sc_hashes, idB_sc_hashes, \
-                             len(cmp.intersect_mh))
+                             cANI_1, cANI_1_low, cANI_1_high,
+                             contain2, cANI_2, cANI_2_low, cANI_2_high,
+                             idA_sc_hashes, idB_sc_hashes, len(cmp.intersect_mh))
         results.append(res)
         if cmp.avg_containment_ani >= ani_thresh:
             ani_res = ANIResult(comparison_name, idA, idB, cmp.avg_containment_ani)
