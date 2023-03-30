@@ -34,6 +34,7 @@ IDENTS = list(dict.fromkeys(identA + identB)) # rm duplicates but preserve order
 PAIRS = zip(identA, identB)
 COMPARISONS = [f"{a}_x_{b}" for a,b in PAIRS]
 KSIZE = [21]
+#KSIZE = [31]
 SCALED = [1, 10, 100, 1000]
 
 
